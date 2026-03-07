@@ -19,7 +19,7 @@
 // =====================================================================
 // CAN 設定（書き込む基板に合わせて変更: 前=0 / 後=1）
 // =====================================================================
-#define BOARD_CAN_ID 1
+#define BOARD_CAN_ID 0
 
 const unsigned int CAN_ID  = 0x400 + BOARD_CAN_ID;
 const unsigned char FB_BASE = 0x40 + BOARD_CAN_ID * 0x0A;
