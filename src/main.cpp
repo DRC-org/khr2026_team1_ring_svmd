@@ -152,7 +152,7 @@ void loop() {
           pos_state = 1;
         } else if (param == 0x02) {  // 本丸
           targetAngles[0] = 30.0f;
-          targetAngles[1] = 60.0f;
+          targetAngles[1] = 74.0f;
           pos_state = 2;
         }
         startPosMotion();
