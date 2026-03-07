@@ -4,13 +4,13 @@
 #include <Servo.h>
 #include <mcp_can.h>
 
-// void readSwitch();
+void readSwitch();
 void updatePosServos();
 void updateHandServo();
 void updateYaguraHandServo();
 void startPosMotion();
 
-// #define PGOOD 2
+#define PGOOD 2
 #define INT 3
 #define SV0 4
 #define SV1 5
@@ -32,7 +32,8 @@ FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 
 MCP_CAN CAN(CS);
 
-unsigned int CAN_ID = 0x401;  // CANのID（サーボモータドライバは 0x400 番台）
+unsigned int CAN_ID;       // CANのID（サーボモータドライバは 0x400 番台）
+unsigned char FB_BASE;    // フィードバック識別子のベース（前: 0x40、後: 0x4A）
 
 // サイン波イージングの平均角速度
 const float SERVO_AVG_SPEED = 45.0f;     // 度/秒
@@ -83,7 +84,7 @@ void startPosMotion() {
 void setup() {
   Serial.begin(115200);
 
-  // pinMode(PGOOD, INPUT);
+  pinMode(PGOOD, INPUT_PULLUP);
   pinMode(INT, INPUT);
   pinMode(SV0, OUTPUT);
   pinMode(SV1, OUTPUT);
@@ -125,6 +126,8 @@ void setup() {
   }
 
   CAN.setMode(MCP_NORMAL);
+
+  readSwitch();  // DIP ジャンパを読み取って CAN_ID を指定
 }
 
 void loop() {
@@ -213,36 +216,29 @@ void loop() {
 
     if (hand_state == 4 && !gripFailSent && !digitalRead(SV4)) {
       unsigned char txBuf[8] = {0x00};
-      txBuf[0] = 0x4C;
+      txBuf[0] = FB_BASE + 0x02;  // 把持失敗
       CAN.sendMsgBuf(0x000, 0, 8, txBuf);
       gripFailSent = true;
     }
   }
 }
 
-// DIPスイッチを読み取ってCAN_IDを指定する
-// void readSwitch() {
-//   unsigned int readNumber = !digitalRead(SW0) + 2 * !digitalRead(SW1) +
-//                             4 * !digitalRead(SW2) + 8 * !digitalRead(SW3);
-//   switch (readNumber) {
-//     case 0:
-//       strip.setPixelColor(0, strip.Color(255, 100, 0));
-//       break;
-//     case 1:
-//       strip.setPixelColor(0, strip.Color(255, 255, 0));
-//       break;
-//     case 2:
-//       strip.setPixelColor(0, strip.Color(0, 255, 0));
-//       break;
-//     case 3:
-//       strip.setPixelColor(0, strip.Color(0, 0, 255));
-//       break;
-//   }
-//   strip.show();
-//   CAN_ID = 0x300 + readNumber;
-//   Serial.print("CAN_ID: ");
-//   Serial.println(CAN_ID);
-// }
+// PGOODピンのジャンパを読み取ってCAN_IDを指定する
+// GND に落とす → 前基板 (0x400)、オープン（プルアップ） → 後基板 (0x401)
+void readSwitch() {
+  if (digitalRead(PGOOD) == LOW) {
+    CAN_ID = 0x400;  // サーボ制御基板（前）
+    FB_BASE = 0x40;
+    strip.setPixelColor(0, strip.Color(0, 255, 0));  // 緑: 前
+  } else {
+    CAN_ID = 0x401;  // サーボ制御基板（後）
+    FB_BASE = 0x4A;
+    strip.setPixelColor(0, strip.Color(0, 0, 255));  // 青: 後
+  }
+  strip.show();
+  Serial.print("CAN_ID: 0x");
+  Serial.println(CAN_ID, HEX);
+}
 
 void updatePosServos() {
   uint32_t now = millis();
@@ -269,7 +265,7 @@ void updatePosServos() {
 
         unsigned char txBuf[8] = {0x00};
 
-        txBuf[0] = 0x4B;
+        txBuf[0] = FB_BASE + 0x01;  // 位置完了
         txBuf[1] = pos_state == 4 ? 0x00 : (pos_state == 5 ? 0x01 : 0x02);
 
         CAN.sendMsgBuf(0x000, 0, 8, txBuf);
@@ -303,7 +299,7 @@ void updateYaguraHandServo() {
 
     unsigned char txBuf[8] = {0x00};
 
-    txBuf[0] = 0x4D;
+    txBuf[0] = FB_BASE + 0x03;  // 櫓ハンド完了
     txBuf[1] = sv3_state == 3 ? 0x01 : 0x00;
 
     CAN.sendMsgBuf(0x000, 0, 8, txBuf);
@@ -333,7 +329,7 @@ void updateHandServo() {
 
     unsigned char txBuf[8] = {0x00};
 
-    txBuf[0] = 0x4A;
+    txBuf[0] = FB_BASE + 0x00;  // 開閉完了
     txBuf[1] = hand_state == 3 ? 0x01 : 0x00;
 
     CAN.sendMsgBuf(0x000, 0, 8, txBuf);
