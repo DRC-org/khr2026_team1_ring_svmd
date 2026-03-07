@@ -25,7 +25,7 @@ sv3は櫓ハンド
     },
     "sv3_control": {
       "open": 0,
-      "close": 90
+      "close": 70
     }
   }
 }
