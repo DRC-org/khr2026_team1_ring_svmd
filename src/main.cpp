@@ -4,13 +4,12 @@
 #include <Servo.h>
 #include <mcp_can.h>
 
-void readSwitch();
 void updatePosServos();
 void updateHandServo();
 void updateYaguraHandServo();
 void startPosMotion();
 
-#define PGOOD 2
+// #define PGOOD 2
 #define INT 3
 #define SV0 4
 #define SV1 5
@@ -32,8 +31,11 @@ FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 
 MCP_CAN CAN(CS);
 
-unsigned int CAN_ID;       // CANのID（サーボモータドライバは 0x400 番台）
-unsigned char FB_BASE;    // フィードバック識別子のベース（前: 0x40、後: 0x4A）
+// 書き込む基板に合わせて変更する（前: 0x400 / 後: 0x401）
+#define BOARD_CAN_ID 0x401
+
+unsigned int CAN_ID = BOARD_CAN_ID;
+unsigned char FB_BASE = (BOARD_CAN_ID == 0x400) ? 0x40 : 0x4A;
 
 // サイン波イージングの平均角速度
 const float SERVO_AVG_SPEED = 45.0f;     // 度/秒
@@ -84,7 +86,7 @@ void startPosMotion() {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(PGOOD, INPUT_PULLUP);
+  // pinMode(PGOOD, INPUT);
   pinMode(INT, INPUT);
   pinMode(SV0, OUTPUT);
   pinMode(SV1, OUTPUT);
@@ -126,8 +128,6 @@ void setup() {
   }
 
   CAN.setMode(MCP_NORMAL);
-
-  readSwitch();  // DIP ジャンパを読み取って CAN_ID を指定
 }
 
 void loop() {
@@ -223,22 +223,6 @@ void loop() {
   }
 }
 
-// PGOODピンのジャンパを読み取ってCAN_IDを指定する
-// GND に落とす → 前基板 (0x400)、オープン（プルアップ） → 後基板 (0x401)
-void readSwitch() {
-  if (digitalRead(PGOOD) == LOW) {
-    CAN_ID = 0x400;  // サーボ制御基板（前）
-    FB_BASE = 0x40;
-    strip.setPixelColor(0, strip.Color(0, 255, 0));  // 緑: 前
-  } else {
-    CAN_ID = 0x401;  // サーボ制御基板（後）
-    FB_BASE = 0x4A;
-    strip.setPixelColor(0, strip.Color(0, 0, 255));  // 青: 後
-  }
-  strip.show();
-  Serial.print("CAN_ID: 0x");
-  Serial.println(CAN_ID, HEX);
-}
 
 void updatePosServos() {
   uint32_t now = millis();
