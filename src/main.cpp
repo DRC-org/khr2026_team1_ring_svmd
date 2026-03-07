@@ -32,7 +32,7 @@ FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 MCP_CAN CAN(CS);
 
 // 書き込む基板に合わせて変更する（前: 0 / 後: 1）
-#define BOARD_CAN_ID 1
+#define BOARD_CAN_ID 0
 
 unsigned int CAN_ID = 0x400 + BOARD_CAN_ID;
 unsigned char FB_BASE = 0x40 + BOARD_CAN_ID * 0x0A;
@@ -110,10 +110,10 @@ void setup() {
   servo2.attach(SV2);
   servo3.attach(SV3);
 
-  servo0.write(0);
-  servo1.write(0);
-  servo2.write(0);
-  servo3.write(0);
+  servo0.write(90);
+  servo1.write(90);
+  servo2.write(90);
+  servo3.write(90);
 
   if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) != CAN_OK) {
     Serial.println("CAN.begin(...) failed.");
