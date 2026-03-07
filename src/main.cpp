@@ -31,11 +31,11 @@ FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 
 MCP_CAN CAN(CS);
 
-// 書き込む基板に合わせて変更する（前: 0x400 / 後: 0x401）
-#define BOARD_CAN_ID 0x401
+// 書き込む基板に合わせて変更する（前: 0 / 後: 1）
+#define BOARD_CAN_ID 1
 
-unsigned int CAN_ID = BOARD_CAN_ID;
-unsigned char FB_BASE = (BOARD_CAN_ID == 0x400) ? 0x40 : 0x4A;
+unsigned int CAN_ID = 0x400 + BOARD_CAN_ID;
+unsigned char FB_BASE = 0x40 + BOARD_CAN_ID * 0x0A;
 
 // サイン波イージングの平均角速度
 const float SERVO_AVG_SPEED = 45.0f;     // 度/秒
