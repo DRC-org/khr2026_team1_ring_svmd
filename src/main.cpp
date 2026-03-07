@@ -27,7 +27,6 @@ Servo servo0;
 Servo servo1;
 Servo servo2;
 Servo servo3;
-Servo servo4;
 
 FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 
@@ -68,6 +67,7 @@ uint32_t motionDurationSv3 = 0;
 int8_t sv3_state = 0;
 
 uint32_t lastUpdateTime = 0;
+bool gripFailSent = false;  // 把持失敗通知済みフラグ
 
 // pos サーボ (0,1) のサイン波モーションを開始する
 void startPosMotion() {
@@ -89,7 +89,7 @@ void setup() {
   pinMode(SV1, OUTPUT);
   pinMode(SV2, OUTPUT);
   pinMode(SV3, OUTPUT);
-  pinMode(SV4, OUTPUT);
+  pinMode(SV4, INPUT_PULLUP);
   pinMode(RGB, OUTPUT);
   pinMode(CS, OUTPUT);
   // pinMode(MOSI, OUTPUT);
@@ -106,13 +106,11 @@ void setup() {
   servo1.attach(SV1);
   servo2.attach(SV2);
   servo3.attach(SV3);
-  servo4.attach(SV4);
 
   servo0.write(0);
   servo1.write(0);
   servo2.write(0);
   servo3.write(0);
-  servo4.write(0);
 
   if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) != CAN_OK) {
     Serial.println("CAN.begin(...) failed.");
@@ -212,6 +210,13 @@ void loop() {
     updatePosServos();
     updateHandServo();
     updateYaguraHandServo();
+
+    if (hand_state == 4 && !gripFailSent && !digitalRead(SV4)) {
+      unsigned char txBuf[8] = {0x00};
+      txBuf[0] = 0x4C;
+      CAN.sendMsgBuf(0x000, 0, 8, txBuf);
+      gripFailSent = true;
+    }
   }
 }
 
@@ -264,7 +269,7 @@ void updatePosServos() {
 
         unsigned char txBuf[8] = {0x00};
 
-        txBuf[0] = 0x4A;
+        txBuf[0] = 0x4B;
         txBuf[1] = pos_state == 4 ? 0x00 : (pos_state == 5 ? 0x01 : 0x02);
 
         CAN.sendMsgBuf(0x000, 0, 8, txBuf);
@@ -298,7 +303,7 @@ void updateYaguraHandServo() {
 
     unsigned char txBuf[8] = {0x00};
 
-    txBuf[0] = 0x4C;
+    txBuf[0] = 0x4D;
     txBuf[1] = sv3_state == 3 ? 0x01 : 0x00;
 
     CAN.sendMsgBuf(0x000, 0, 8, txBuf);
@@ -323,11 +328,12 @@ void updateHandServo() {
       hand_state = 3;  // OPEN_DONE
     } else if (hand_state == 1) {
       hand_state = 4;  // CLOSE_DONE
+      gripFailSent = false;
     }
 
     unsigned char txBuf[8] = {0x00};
 
-    txBuf[0] = 0x4B;
+    txBuf[0] = 0x4A;
     txBuf[1] = hand_state == 3 ? 0x01 : 0x00;
 
     CAN.sendMsgBuf(0x000, 0, 8, txBuf);
