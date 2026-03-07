@@ -19,7 +19,7 @@
 // =====================================================================
 // CAN 設定（書き込む基板に合わせて変更: 前=0 / 後=1）
 // =====================================================================
-#define BOARD_CAN_ID 0
+#define BOARD_CAN_ID 1
 
 const unsigned int CAN_ID  = 0x400 + BOARD_CAN_ID;
 const unsigned char FB_BASE = 0x40 + BOARD_CAN_ID * 0x0A;
@@ -53,6 +53,7 @@ const float YAGURA_CLOSE_ANGLE = 70.0f;
 // =====================================================================
 // モーション定数
 // =====================================================================
+const float    SCALE_270         = 180.0f / 270.0f;  // 270°サーボ → servo.write() 変換係数
 const float    POS_SERVO_SPEED   = 45.0f;   // 位置サーボ 平均角速度 [deg/s]
 const float    YAGURA_SERVO_SPEED = 20.0f;  // 櫓ハンド 平均角速度 [deg/s]
 const uint32_t UPDATE_INTERVAL_MS = 10;     // 制御ループ周期 [ms]（100Hz）
@@ -169,14 +170,14 @@ void setup() {
   strip.setPixelColor(0, strip.Color(0, 255, 0));
   strip.show();
 
-  servo0.attach(SV0);
-  servo1.attach(SV1);
-  servo2.attach(SV2);
-  servo3.attach(SV3);
+  servo0.attach(SV0, 500, 2400);
+  servo1.attach(SV1, 500, 2400);
+  servo2.attach(SV2, 500, 2400);
+  servo3.attach(SV3, 500, 2400);
 
-  servo0.write(90);
+  servo0.write((int)roundf(90.0f * SCALE_270));
   servo1.write(150);
-  servo2.write(90);
+  servo2.write((int)roundf(90.0f * SCALE_270));
   servo3.write(0);
 
   if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) != CAN_OK) {
@@ -295,7 +296,7 @@ void updatePosServos() {
     // 完了・停止中は現在角を維持
     if (pos_state >= POS_STOPPED) {
       targetAngles[i] = currentAngles[i];
-      servos[i]->write((int)roundf(currentAngles[i]));
+      servos[i]->write((int)roundf(currentAngles[i] * SCALE_270));
       continue;
     }
 
@@ -321,7 +322,7 @@ void updatePosServos() {
       currentAngles[i] = startAngles[i] + (targetAngles[i] - startAngles[i]) * ease;
     }
 
-    servos[i]->write((int)roundf(currentAngles[i]));
+    servos[i]->write((int)roundf(currentAngles[i] * SCALE_270));
   }
 }
 
@@ -374,5 +375,5 @@ void updateYaguraHandServo() {
     currentSv3Angle = startSv3Angle + (targetSv3Angle - startSv3Angle) * ease;
   }
 
-  servo3.write((int)roundf(currentSv3Angle));
+  servo3.write((int)roundf(currentSv3Angle * SCALE_270));
 }
