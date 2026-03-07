@@ -1,45 +1,51 @@
 #include <Arduino.h>
-#include <Arduino_CAN.h>
 #include <FastLED_NeoPixel.h>
+#include <SPI.h>
 #include <Servo.h>
+#include <mcp_can.h>
 
 // void readSwitch();
 void updatePosServos();
 void updateHandServo();
+void startPosMotion();
 
-// サーボ関係
-#define SV0 3   // 関節 1 (150 kg)
-#define SV1 6   // 関節 2 (20 kg)
-#define SV2 10  // ハンド
-#define SV3 9
-// LED 関係
-#define LED_PIN 13
-#define RGB 8
-// 通信関係
-#define CAN_RX 5
-#define CAN_TX 4
-// 入力関係
-#define SW0 8
-#define SW1 9
-#define SW2 1
-#define SW3 0
+// #define PGOOD 2
+#define INT 3
+#define SV0 4
+#define SV1 5
+#define SV2 6
+#define SV3 7
+#define SV4 8
+#define RGB 9
+#define CS 10
+// #define MOSI 11
+// #define MISO 12
+// #define SCLK 13
 
 Servo servo0;
 Servo servo1;
 Servo servo2;
+Servo servo3;
+Servo servo4;
 
 FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 
+MCP_CAN CAN(CS);
+
 unsigned int CAN_ID = 0x401;  // CANのID（サーボモータドライバは 0x400 番台）
 
-const float SERVO_MAX_SPEED = 5.0f;  // 最大角速度（度/step）
-const float SERVO_ACCEL = 0.4f;      // 加速度（度/step²）
+// サイン波イージングの平均角速度
+const float SERVO_AVG_SPEED = 45.0f;  // 度/秒
 const float SERVO_LINEAR_SPEED = 5.0f;
+const uint32_t UPDATE_INTERVAL_MS = 10;  // 更新間隔 (100Hz)
 
 Servo* servos[3] = {&servo0, &servo1, &servo2};
 float currentAngles[3] = {80.0f, 80.0f, 80.0f};
 float targetAngles[3] = {80.0f, 80.0f, 80.0f};
-float servoVelocities[3] = {0.0f, 0.0f, 0.0f};
+
+float startAngles[2] = {80.0f, 80.0f};
+uint32_t motionStartTime[2] = {0, 0};
+uint32_t motionDuration[2] = {0, 0};
 
 // 0: PICKUP, 1: YAGURA, 2: HONMARU, 3: STOPPED, 4: PICKUP_DONE, 5: YAGURA_DONE,
 // 6: HONMARU_DONE
@@ -48,21 +54,34 @@ int8_t pos_state = 0;
 // 0: OPEN, 1: CLOSE, 2: STOPPED, 3: OPEN_DONE, 4: CLOSE_DONE
 int8_t hand_state = 0;
 
-unsigned long lastUpdateMs = 0;
+uint32_t lastUpdateTime = 0;
+
+// pos サーボ (0,1) のサイン波モーションを開始する
+void startPosMotion() {
+  uint32_t now = millis();
+  for (int i = 0; i < 2; i++) {
+    startAngles[i] = currentAngles[i];
+    float dist = fabsf(targetAngles[i] - currentAngles[i]);
+    motionDuration[i] = (uint32_t)(dist / SERVO_AVG_SPEED * 1000.0f);
+    motionStartTime[i] = now;
+  }
+}
 
 void setup() {
   Serial.begin(115200);
 
+  // pinMode(PGOOD, INPUT);
+  pinMode(INT, INPUT);
   pinMode(SV0, OUTPUT);
   pinMode(SV1, OUTPUT);
   pinMode(SV2, OUTPUT);
-  // pinMode(SV3, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
+  pinMode(SV3, OUTPUT);
+  pinMode(SV4, OUTPUT);
   pinMode(RGB, OUTPUT);
-  pinMode(SW0, INPUT_PULLUP);
-  pinMode(SW1, INPUT_PULLUP);
-  pinMode(SW2, INPUT_PULLUP);
-  pinMode(SW3, INPUT_PULLUP);
+  pinMode(CS, OUTPUT);
+  // pinMode(MOSI, OUTPUT);
+  // pinMode(MISO, INPUT);
+  // pinMode(SCLK, OUTPUT);
 
   strip.begin();
   strip.setBrightness(100);
@@ -73,21 +92,16 @@ void setup() {
   servo0.attach(SV0);
   servo1.attach(SV1);
   servo2.attach(SV2);
-  Serial.println("Setup done.");
+  servo3.attach(SV3);
+  servo4.attach(SV4);
 
-  servo0.write(12);
+  servo0.write(0);
   servo1.write(0);
   servo2.write(0);
+  servo3.write(0);
+  servo4.write(0);
 
-  Serial.println("Waiting for power...");
-
-  delay(50);
-
-  // TODO: ホーミング
-
-  lastUpdateMs = millis();
-
-  if (!CAN.begin(CanBitRate::BR_1000k)) {
+  if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) == CAN_OK) {
     Serial.println("CAN.begin(...) failed.");
     while (1) {
       strip.setPixelColor(0, strip.Color(255, 0, 0));
@@ -99,17 +113,20 @@ void setup() {
     }
   }
 
-  // readSwitch();  // DIP スイッチの読み出して CAN_ID を指定
+  CAN.setMode(MCP_NORMAL);
 }
 
 void loop() {
-  if (CAN.available()) {
-    CanMsg const msg = CAN.read();  // 受信した CAN の読み出し
-    unsigned int rxId = msg.id;
+  if (!digitalRead(INT)) {
+    long unsigned int rxId;
+    unsigned char len = 0;
+    unsigned char rxBuf[8];
+
+    CAN.readMsgBuf(&rxId, &len, rxBuf);
 
     if (rxId == CAN_ID) {
-      unsigned char command = msg.data[0];
-      unsigned char param = msg.data[1];
+      unsigned char command = rxBuf[0];
+      unsigned char param = rxBuf[1];
 
       if (command == 0x00) {  // ハンド 1 を移動
         if (param == 0x00) {  // ピックアップ
@@ -125,6 +142,7 @@ void loop() {
           targetAngles[1] = 0.0f;
           pos_state = 2;
         }
+        startPosMotion();
       } else if (command == 0x01) {  // ハンド 1 を停止
         targetAngles[0] = currentAngles[0];
         targetAngles[1] = currentAngles[1];
@@ -137,7 +155,6 @@ void loop() {
         hand_state = 0;
       } else if (command == 0x12) {  // ハンド 1 を停止
         targetAngles[2] = currentAngles[2];
-        servoVelocities[2] = 0.0f;
         hand_state = 2;
       }
 
@@ -153,7 +170,11 @@ void loop() {
       //   states[1] = 2;  // STOPPED
       // }
     }
+  }
 
+  uint32_t now = millis();
+  if (now - lastUpdateTime >= UPDATE_INTERVAL_MS) {
+    lastUpdateTime = now;
     updatePosServos();
     updateHandServo();
   }
@@ -184,19 +205,18 @@ void loop() {
 // }
 
 void updatePosServos() {
+  uint32_t now = millis();
+
   for (int i = 0; i < 2; i++) {
     if (pos_state == 3 || pos_state == 4 || pos_state == 5 || pos_state == 6) {
       targetAngles[i] = currentAngles[i];
       continue;
     }
 
-    float diff = targetAngles[i] - currentAngles[i];
-    float dist = fabsf(diff);
-    float vel = servoVelocities[i];
+    uint32_t elapsed = now - motionStartTime[i];
 
-    if (dist < 0.5f) {
+    if (elapsed >= motionDuration[i]) {
       currentAngles[i] = targetAngles[i];
-      servoVelocities[i] = 0.0f;
 
       if (i == 0) {
         if (pos_state == 0) {
@@ -207,45 +227,19 @@ void updatePosServos() {
           pos_state = 6;  // HONMARU_DONE
         }
 
-        CanMsg msg;
-        msg.id = 0x000;
-        msg.data_length = 8;
+        unsigned char txBuf[8] = {0x00};
 
-        msg.data[0] = 0x4A;
-        msg.data[1] = pos_state == 4 ? 0x00 : (pos_state == 5 ? 0x01 : 0x02);
+        txBuf[0] = 0x4A;
+        txBuf[1] = pos_state == 4 ? 0x00 : (pos_state == 5 ? 0x01 : 0x02);
 
-        CAN.write(msg);
+        CAN.sendMsgBuf(0x000, 0, 8, txBuf);
       }
     } else {
-      float dir = (diff > 0.0f) ? 1.0f : -1.0f;
-
-      if (vel * diff >= 0.0f) {
-        // 目標方向に進んでいる: 制動距離 v²/(2a) を基に加速か減速かを判断
-        float stopDist = (vel * vel) / (2.0f * SERVO_ACCEL);
-        if (dist <= stopDist + SERVO_ACCEL) {
-          // 減速フェーズ (Ease-out)
-          vel -= dir * SERVO_ACCEL;
-          if ((dir > 0.0f && vel < 0.0f) || (dir < 0.0f && vel > 0.0f))
-            vel = 0.0f;
-        } else {
-          // 加速フェーズ (Ease-in) または定速
-          vel = constrain(vel + dir * SERVO_ACCEL, -SERVO_MAX_SPEED,
-                          SERVO_MAX_SPEED);
-        }
-      } else {
-        // 逆方向に動いている: 目標方向へ加速
-        vel = constrain(vel + dir * SERVO_ACCEL, -SERVO_MAX_SPEED,
-                        SERVO_MAX_SPEED);
-      }
-
-      // オーバーシュート防止
-      if (fabsf(vel) >= dist) {
-        currentAngles[i] = targetAngles[i];
-        vel = 0.0f;
-      } else {
-        currentAngles[i] += vel;
-      }
-      servoVelocities[i] = vel;
+      float t = (float)elapsed / (float)motionDuration[i];
+      // サイン波イージング: 開始・終了を滑らかにして慣性を抑制
+      float ease = (1.0f - cosf(PI * t)) / 2.0f;
+      currentAngles[i] =
+          startAngles[i] + (targetAngles[i] - startAngles[i]) * ease;
     }
 
     servos[i]->write((int)roundf(currentAngles[i]));
@@ -266,14 +260,12 @@ void updateHandServo() {
       hand_state = 4;  // CLOSE_DONE
     }
 
-    CanMsg msg;
-    msg.id = 0x000;
-    msg.data_length = 8;
+    unsigned char txBuf[8] = {0x00};
 
-    msg.data[0] = 0x4B;
-    msg.data[1] = hand_state == 3 ? 0x01 : 0x00;
+    txBuf[0] = 0x4B;
+    txBuf[1] = hand_state == 3 ? 0x01 : 0x00;
 
-    CAN.write(msg);
+    CAN.sendMsgBuf(0x000, 0, 8, txBuf);
   } else {
     float step = constrain(diff, -SERVO_LINEAR_SPEED, SERVO_LINEAR_SPEED);
     currentAngles[2] += step;
