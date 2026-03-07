@@ -7,6 +7,7 @@
 // void readSwitch();
 void updatePosServos();
 void updateHandServo();
+void updateYaguraHandServo();
 void startPosMotion();
 
 // #define PGOOD 2
@@ -35,8 +36,8 @@ MCP_CAN CAN(CS);
 unsigned int CAN_ID = 0x401;  // CANのID（サーボモータドライバは 0x400 番台）
 
 // サイン波イージングの平均角速度
-const float SERVO_AVG_SPEED = 45.0f;  // 度/秒
-const float SERVO_LINEAR_SPEED = 5.0f;
+const float SERVO_AVG_SPEED = 45.0f;     // 度/秒
+const float SERVO_AVG_SPEED_SV3 = 20.0f;  // sv3用（ゆっくり）
 const uint32_t UPDATE_INTERVAL_MS = 10;  // 更新間隔 (100Hz)
 
 Servo* servos[3] = {&servo0, &servo1, &servo2};
@@ -47,12 +48,24 @@ float startAngles[2] = {80.0f, 80.0f};
 uint32_t motionStartTime[2] = {0, 0};
 uint32_t motionDuration[2] = {0, 0};
 
+float startAngleHand = 80.0f;
+uint32_t motionStartTimeHand = 0;
+uint32_t motionDurationHand = 0;
+
 // 0: PICKUP, 1: YAGURA, 2: HONMARU, 3: STOPPED, 4: PICKUP_DONE, 5: YAGURA_DONE,
 // 6: HONMARU_DONE
 int8_t pos_state = 0;
 
 // 0: OPEN, 1: CLOSE, 2: STOPPED, 3: OPEN_DONE, 4: CLOSE_DONE
 int8_t hand_state = 0;
+
+float currentSv3Angle = 0.0f;
+float targetSv3Angle = 0.0f;
+float startSv3Angle = 0.0f;
+uint32_t motionStartTimeSv3 = 0;
+uint32_t motionDurationSv3 = 0;
+// 0: OPEN, 1: CLOSE, 2: STOPPED, 3: OPEN_DONE, 4: CLOSE_DONE
+int8_t sv3_state = 0;
 
 uint32_t lastUpdateTime = 0;
 
@@ -101,7 +114,7 @@ void setup() {
   servo3.write(0);
   servo4.write(0);
 
-  if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) == CAN_OK) {
+  if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) != CAN_OK) {
     Serial.println("CAN.begin(...) failed.");
     while (1) {
       strip.setPixelColor(0, strip.Color(255, 0, 0));
@@ -130,16 +143,16 @@ void loop() {
 
       if (command == 0x00) {  // ハンド 1 を移動
         if (param == 0x00) {  // ピックアップ
-          targetAngles[0] = 12.0f;
-          targetAngles[1] = 0.0f;
+          targetAngles[0] = 199.0f;
+          targetAngles[1] = 264.0f;
           pos_state = 0;
         } else if (param == 0x01) {  // やぐら
-          targetAngles[0] = 12.0f;
-          targetAngles[1] = 0.0f;
+          targetAngles[0] = 30.0f;
+          targetAngles[1] = 60.0f;
           pos_state = 1;
         } else if (param == 0x02) {  // 本丸
-          targetAngles[0] = 12.0f;
-          targetAngles[1] = 0.0f;
+          targetAngles[0] = 30.0f;
+          targetAngles[1] = 60.0f;
           pos_state = 2;
         }
         startPosMotion();
@@ -148,14 +161,35 @@ void loop() {
         targetAngles[1] = currentAngles[1];
         pos_state = 3;
       } else if (command == 0x10) {  // ハンド 1 を閉じる
-        targetAngles[2] = 80.0f;
+        targetAngles[2] = 180.0f;
         hand_state = 1;
+        startAngleHand = currentAngles[2];
+        motionDurationHand = (uint32_t)(fabsf(targetAngles[2] - currentAngles[2]) / SERVO_AVG_SPEED * 1000.0f);
+        motionStartTimeHand = millis();
       } else if (command == 0x11) {  // ハンド 1 を開く
-        targetAngles[2] = 0.0f;
+        targetAngles[2] = 120.0f;
         hand_state = 0;
+        startAngleHand = currentAngles[2];
+        motionDurationHand = (uint32_t)(fabsf(targetAngles[2] - currentAngles[2]) / SERVO_AVG_SPEED * 1000.0f);
+        motionStartTimeHand = millis();
       } else if (command == 0x12) {  // ハンド 1 を停止
         targetAngles[2] = currentAngles[2];
         hand_state = 2;
+      } else if (command == 0x20) {  // 櫓ハンドを閉じる
+        targetSv3Angle = 90.0f;
+        sv3_state = 1;
+        startSv3Angle = currentSv3Angle;
+        motionDurationSv3 = (uint32_t)(fabsf(targetSv3Angle - currentSv3Angle) / SERVO_AVG_SPEED_SV3 * 1000.0f);
+        motionStartTimeSv3 = millis();
+      } else if (command == 0x21) {  // 櫓ハンドを開く
+        targetSv3Angle = 0.0f;
+        sv3_state = 0;
+        startSv3Angle = currentSv3Angle;
+        motionDurationSv3 = (uint32_t)(fabsf(targetSv3Angle - currentSv3Angle) / SERVO_AVG_SPEED_SV3 * 1000.0f);
+        motionStartTimeSv3 = millis();
+      } else if (command == 0x22) {  // 櫓ハンドを停止
+        targetSv3Angle = currentSv3Angle;
+        sv3_state = 2;
       }
 
       // if (command == 0x10) {  // ハンド 2 を閉じる
@@ -177,6 +211,7 @@ void loop() {
     lastUpdateTime = now;
     updatePosServos();
     updateHandServo();
+    updateYaguraHandServo();
   }
 }
 
@@ -246,13 +281,43 @@ void updatePosServos() {
   }
 }
 
+void updateYaguraHandServo() {
+  if (sv3_state == 2 || sv3_state == 3 || sv3_state == 4) {
+    return;
+  }
+
+  uint32_t elapsed = millis() - motionStartTimeSv3;
+
+  if (elapsed >= motionDurationSv3) {
+    currentSv3Angle = targetSv3Angle;
+    if (sv3_state == 0) {
+      sv3_state = 3;  // OPEN_DONE
+    } else if (sv3_state == 1) {
+      sv3_state = 4;  // CLOSE_DONE
+    }
+
+    unsigned char txBuf[8] = {0x00};
+
+    txBuf[0] = 0x4C;
+    txBuf[1] = sv3_state == 3 ? 0x01 : 0x00;
+
+    CAN.sendMsgBuf(0x000, 0, 8, txBuf);
+  } else {
+    float t = (float)elapsed / (float)motionDurationSv3;
+    float ease = (1.0f - cosf(PI * t)) / 2.0f;
+    currentSv3Angle = startSv3Angle + (targetSv3Angle - startSv3Angle) * ease;
+  }
+  servo3.write((int)roundf(currentSv3Angle));
+}
+
 void updateHandServo() {
   if (hand_state == 2 || hand_state == 3 || hand_state == 4) {
     return;
   }
 
-  float diff = targetAngles[2] - currentAngles[2];
-  if (fabsf(diff) < 0.5f) {
+  uint32_t elapsed = millis() - motionStartTimeHand;
+
+  if (elapsed >= motionDurationHand) {
     currentAngles[2] = targetAngles[2];
     if (hand_state == 0) {
       hand_state = 3;  // OPEN_DONE
@@ -267,8 +332,9 @@ void updateHandServo() {
 
     CAN.sendMsgBuf(0x000, 0, 8, txBuf);
   } else {
-    float step = constrain(diff, -SERVO_LINEAR_SPEED, SERVO_LINEAR_SPEED);
-    currentAngles[2] += step;
+    float t = (float)elapsed / (float)motionDurationHand;
+    float ease = (1.0f - cosf(PI * t)) / 2.0f;
+    currentAngles[2] = startAngleHand + (targetAngles[2] - startAngleHand) * ease;
   }
   servos[2]->write((int)roundf(currentAngles[2]));
 }
