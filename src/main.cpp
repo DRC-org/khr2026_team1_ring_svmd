@@ -17,12 +17,22 @@
 #define CS  10
 
 // =====================================================================
-// CAN 設定（書き込む基板に合わせて変更: 前=0 / 後=1）
+// DIP スイッチ（A0〜A3）で CAN_ID を自動設定
 // =====================================================================
-#define BOARD_CAN_ID 0
+#define SW0 A0
+#define SW1 A1
+#define SW2 A2
+#define SW3 A3
 
-const unsigned int CAN_ID  = 0x400 + BOARD_CAN_ID;
-const unsigned char FB_BASE = 0x40 + BOARD_CAN_ID * 0x0A;
+unsigned int CAN_ID;
+unsigned char FB_BASE;
+
+void readSwitch() {
+  unsigned int id = !digitalRead(SW0) + 2 * !digitalRead(SW1) +
+                    4 * !digitalRead(SW2) + 8 * !digitalRead(SW3);
+  CAN_ID  = 0x400 + id;
+  FB_BASE = 0x40 + id * 0x0A;
+}
 
 // フィードバック識別子
 // FB_BASE+0x00: 開閉完了
@@ -155,6 +165,13 @@ void sendFeedback(unsigned char id, unsigned char param) {
 // =====================================================================
 void setup() {
   Serial.begin(115200);
+
+  pinMode(SW0, INPUT_PULLUP);
+  pinMode(SW1, INPUT_PULLUP);
+  pinMode(SW2, INPUT_PULLUP);
+  pinMode(SW3, INPUT_PULLUP);
+
+  readSwitch();
 
   pinMode(INT, INPUT);
   pinMode(SV0, OUTPUT);
