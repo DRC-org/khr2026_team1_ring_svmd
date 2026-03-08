@@ -231,19 +231,20 @@ void loop() {
         targetAngles[1] = currentAngles[1];
         pos_state = POS_STOPPED;
 
-      } else if (command == 0x10) {  // リングハンド 閉じる
+      } else if (command == 0x10) {  // リングハンド 閉じる（即時）
+        currentAngles[2] = HAND_CLOSE_ANGLE;
         targetAngles[2]  = HAND_CLOSE_ANGLE;
-        hand_state       = HAND_CLOSE;
-        startAngleHand   = currentAngles[2];
-        motionDurationHand = (uint32_t)(fabsf(HAND_CLOSE_ANGLE - currentAngles[2]) / POS_SERVO_SPEED * 1000.0f);
-        motionStartTimeHand = millis();
+        servos[2]->write((int)roundf(HAND_CLOSE_ANGLE));
+        hand_state   = HAND_CLOSE_DONE;
+        gripFailSent = false;
+        sendFeedback(FB_BASE + 0x00, 0x00);
 
-      } else if (command == 0x11) {  // リングハンド 開く
+      } else if (command == 0x11) {  // リングハンド 開く（即時）
+        currentAngles[2] = HAND_OPEN_ANGLE;
         targetAngles[2]  = HAND_OPEN_ANGLE;
-        hand_state       = HAND_OPEN;
-        startAngleHand   = currentAngles[2];
-        motionDurationHand = (uint32_t)(fabsf(HAND_OPEN_ANGLE - currentAngles[2]) / POS_SERVO_SPEED * 1000.0f);
-        motionStartTimeHand = millis();
+        servos[2]->write((int)roundf(HAND_OPEN_ANGLE));
+        hand_state = HAND_OPEN_DONE;
+        sendFeedback(FB_BASE + 0x00, 0x01);
 
       } else if (command == 0x12) {  // リングハンド 停止
         targetAngles[2] = currentAngles[2];
