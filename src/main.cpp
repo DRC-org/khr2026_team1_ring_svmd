@@ -292,37 +292,40 @@ void loop() {
 void updatePosServos() {
   uint32_t now = millis();
 
-  for (int i = 0; i < 2; i++) {
-    // 完了・停止中は現在角を維持
-    if (pos_state >= POS_STOPPED) {
+  // 完了・停止中は現在角を維持
+  if (pos_state >= POS_STOPPED) {
+    for (int i = 0; i < 2; i++) {
       targetAngles[i] = currentAngles[i];
       servos[i]->write((int)roundf(currentAngles[i] * SCALE_270));
-      continue;
     }
+    return;
+  }
 
+  // 移動中: SV0/SV2 両方をイージングで更新
+  bool all_done = true;
+  for (int i = 0; i < 2; i++) {
     uint32_t elapsed = now - motionStartTime[i];
-
     if (elapsed >= motionDuration[i]) {
       currentAngles[i] = targetAngles[i];
-
-      // SV0 完了時にフィードバック送信（SV2 は追従するだけ）
-      if (i == 0) {
-        if      (pos_state == POS_PICKUP)  pos_state = POS_PICKUP_DONE;
-        else if (pos_state == POS_YAGURA)  pos_state = POS_YAGURA_DONE;
-        else if (pos_state == POS_HONMARU) pos_state = POS_HONMARU_DONE;
-
-        unsigned char dest = (pos_state == POS_PICKUP_DONE)  ? 0x00
-                           : (pos_state == POS_YAGURA_DONE)  ? 0x01
-                                                              : 0x02;
-        sendFeedback(FB_BASE + 0x01, dest);
-      }
     } else {
+      all_done = false;
       float t    = (float)elapsed / (float)motionDuration[i];
       float ease = (1.0f - cosf(PI * t)) / 2.0f;
       currentAngles[i] = startAngles[i] + (targetAngles[i] - startAngles[i]) * ease;
     }
-
     servos[i]->write((int)roundf(currentAngles[i] * SCALE_270));
+  }
+
+  // SV0/SV2 両方完了したらフィードバック送信
+  if (all_done) {
+    if      (pos_state == POS_PICKUP)  pos_state = POS_PICKUP_DONE;
+    else if (pos_state == POS_YAGURA)  pos_state = POS_YAGURA_DONE;
+    else if (pos_state == POS_HONMARU) pos_state = POS_HONMARU_DONE;
+
+    unsigned char dest = (pos_state == POS_PICKUP_DONE)  ? 0x00
+                       : (pos_state == POS_YAGURA_DONE)  ? 0x01
+                                                          : 0x02;
+    sendFeedback(FB_BASE + 0x01, dest);
   }
 }
 
