@@ -102,7 +102,8 @@ float    startAngleHand     = 80.0f;
 uint32_t motionStartTimeHand = 0;
 uint32_t motionDurationHand  = 0;
 HandState hand_state = HAND_OPEN;
-bool gripFailSent = false;
+bool     gripCheckPending   = false;
+uint32_t gripCheckStartTime = 0;
 
 // 櫓ハンド（SV3）モーション
 float    currentSv3Angle    = 0.0f;
@@ -237,16 +238,17 @@ void loop() {
         currentAngles[2] = cfg->hand_close;
         targetAngles[2]  = cfg->hand_close;
         servos[2]->write((int)roundf(cfg->hand_close));
-        hand_state   = HAND_CLOSE_DONE;
-        gripFailSent = false;
+        hand_state        = HAND_CLOSE_DONE;
+        gripCheckPending  = false;
         sendFeedback(FB_BASE + 0x00, 0x00);
 
-      } else if (command == 0x11) {  // リングハンド 開く（即時）
-        currentAngles[2] = cfg->hand_open;
-        targetAngles[2]  = cfg->hand_open;
+      } else if (command == 0x11) {  // リングハンド 開く → 1秒後に把握判定
+        currentAngles[2]  = cfg->hand_open;
+        targetAngles[2]   = cfg->hand_open;
         servos[2]->write((int)roundf(cfg->hand_open));
-        hand_state = HAND_OPEN_DONE;
-        sendFeedback(FB_BASE + 0x00, 0x01);
+        hand_state        = HAND_OPEN_DONE;
+        gripCheckPending  = true;
+        gripCheckStartTime = millis();
 
       } else if (command == 0x12) {  // リングハンド 停止
         targetAngles[2] = currentAngles[2];
@@ -281,10 +283,22 @@ void loop() {
     updateHandServo();
     updateYaguraHandServo();
 
-    // 把持失敗検出: CLOSE_DONE後にタッチセンサーが導通（LOW）したら1回送信
-    if (hand_state == HAND_CLOSE_DONE && !gripFailSent && !digitalRead(SV4)) {
-      sendFeedback(FB_BASE + 0x02, 0x00);
-      gripFailSent = true;
+    // open後1秒でSV4チェック: 非導通=把握成功, 導通=把握失敗
+    if (gripCheckPending && now - gripCheckStartTime >= 1000) {
+      gripCheckPending = false;
+      if (!digitalRead(SV4)) {  // 導通 → 把握失敗 → 閉じる
+        currentAngles[2] = cfg->hand_close;
+        targetAngles[2]  = cfg->hand_close;
+        servos[2]->write((int)roundf(cfg->hand_close));
+        hand_state = HAND_CLOSE_DONE;
+        sendFeedback(FB_BASE + 0x00, 0x00);  // 閉じ完了を通知
+        sendFeedback(FB_BASE + 0x02, 0x00);  // 把握失敗を通知
+      } else {                   // 非導通 → 把握成功
+        currentAngles[2] = cfg->hand_grip;
+        targetAngles[2]  = cfg->hand_grip;
+        servos[2]->write((int)roundf(cfg->hand_grip));
+        sendFeedback(FB_BASE + 0x00, 0x01);
+      }
     }
   }
 }
@@ -348,7 +362,6 @@ void updateHandServo() {
       hand_state = HAND_OPEN_DONE;
     } else if (hand_state == HAND_CLOSE) {
       hand_state   = HAND_CLOSE_DONE;
-      gripFailSent = false;
     }
     sendFeedback(FB_BASE + 0x00, hand_state == HAND_OPEN_DONE ? 0x01 : 0x00);
   } else {

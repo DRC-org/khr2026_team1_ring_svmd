@@ -16,6 +16,7 @@ struct BoardConfig {
   // リングハンド（SV1）
   float hand_open;
   float hand_close;
+  float hand_grip;  // 把握成功確認角度
   // 櫓ハンド（SV3）
   float yagura_open;
   float yagura_close;
@@ -28,15 +29,15 @@ const BoardConfig BOARD_CONFIGS[] = {
     199.0f, 264.0f,  // pickup  SV0, SV2
      30.0f,  60.0f,  // yagura  SV0, SV2
      30.0f,  74.0f,  // honmaru SV0, SV2
-    120.0f, 180.0f,  // hand open, close
-      0.0f,  70.0f,  // yagura hand open, close
+    170.0f, 70.0f, 115.0f,  // hand open(g), close(r), grip
+      0.0f,  70.0f,          // yagura hand open, close
   },
   // ---- ID=1: 後基板 ----
   {
     199.0f, 264.0f,  // pickup  SV0, SV2
      30.0f,  60.0f,  // yagura  SV0, SV2
      30.0f,  74.0f,  // honmaru SV0, SV2
-    120.0f, 180.0f,  // hand open, close
-      0.0f,  70.0f,  // yagura hand open, close
+    170.0f, 70.0f, 115.0f,  // hand open(g), close(r), grip
+      0.0f,  70.0f,          // yagura hand open, close
   },
 };
