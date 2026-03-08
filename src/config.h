@@ -1,0 +1,42 @@
+#pragma once
+
+// =====================================================================
+// ボードごとのサーボ角度設定
+// BOARD_ID = DIPスイッチで決まる数値（0, 1, ...）
+// =====================================================================
+
+struct BoardConfig {
+  // 位置サーボ
+  float pos_pickup_sv0;
+  float pos_pickup_sv2;
+  float pos_yagura_sv0;
+  float pos_yagura_sv2;
+  float pos_honmaru_sv0;
+  float pos_honmaru_sv2;
+  // リングハンド（SV1）
+  float hand_open;
+  float hand_close;
+  // 櫓ハンド（SV3）
+  float yagura_open;
+  float yagura_close;
+};
+
+// インデックス = BOARD_ID（DIPスイッチ値）
+const BoardConfig BOARD_CONFIGS[] = {
+  // ---- ID=0: 前基板 ----
+  {
+    199.0f, 264.0f,  // pickup  SV0, SV2
+     30.0f,  60.0f,  // yagura  SV0, SV2
+     30.0f,  74.0f,  // honmaru SV0, SV2
+    120.0f, 180.0f,  // hand open, close
+      0.0f,  70.0f,  // yagura hand open, close
+  },
+  // ---- ID=1: 後基板 ----
+  {
+    199.0f, 264.0f,  // pickup  SV0, SV2
+     30.0f,  60.0f,  // yagura  SV0, SV2
+     30.0f,  74.0f,  // honmaru SV0, SV2
+    120.0f, 180.0f,  // hand open, close
+      0.0f,  70.0f,  // yagura hand open, close
+  },
+};

@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <Servo.h>
 #include <mcp_can.h>
+#include "config.h"
 
 // =====================================================================
 // ピン定義
@@ -26,12 +27,14 @@
 
 unsigned int CAN_ID;
 unsigned char FB_BASE;
+const BoardConfig* cfg;
 
 void readSwitch() {
   unsigned int id = !digitalRead(SW0) + 2 * !digitalRead(SW1) +
                     4 * !digitalRead(SW2) + 8 * !digitalRead(SW3);
   CAN_ID  = 0x400 + id;
   FB_BASE = 0x40 + id * 0x0A;
+  cfg = &BOARD_CONFIGS[id];
 }
 
 // フィードバック識別子
@@ -40,25 +43,7 @@ void readSwitch() {
 // FB_BASE+0x02: 把持失敗
 // FB_BASE+0x03: 櫓ハンド完了
 
-// =====================================================================
-// サーボ角度定数
-// =====================================================================
-
-// 位置サーボ目標角度
-const float POS_PICKUP_SV0  = 199.0f;
-const float POS_PICKUP_SV2  = 264.0f;
-const float POS_YAGURA_SV0  = 30.0f;
-const float POS_YAGURA_SV2  = 60.0f;
-const float POS_HONMARU_SV0 = 30.0f;
-const float POS_HONMARU_SV2 = 74.0f;
-
-// リングハンド角度
-const float HAND_OPEN_ANGLE  = 120.0f;
-const float HAND_CLOSE_ANGLE = 180.0f;
-
-// 櫓ハンド角度
-const float YAGURA_OPEN_ANGLE  = 0.0f;
-const float YAGURA_CLOSE_ANGLE = 70.0f;
+// サーボ角度は config.h の BoardConfig を参照 (cfg->pos_pickup_sv0 等)
 
 // =====================================================================
 // モーション定数
@@ -229,16 +214,16 @@ void loop() {
 
       if (command == 0x00) {  // 位置移動
         if (param == 0x00) {
-          targetAngles[0] = POS_PICKUP_SV0;
-          targetAngles[1] = POS_PICKUP_SV2;
+          targetAngles[0] = cfg->pos_pickup_sv0;
+          targetAngles[1] = cfg->pos_pickup_sv2;
           pos_state = POS_PICKUP;
         } else if (param == 0x01) {
-          targetAngles[0] = POS_YAGURA_SV0;
-          targetAngles[1] = POS_YAGURA_SV2;
+          targetAngles[0] = cfg->pos_yagura_sv0;
+          targetAngles[1] = cfg->pos_yagura_sv2;
           pos_state = POS_YAGURA;
         } else if (param == 0x02) {
-          targetAngles[0] = POS_HONMARU_SV0;
-          targetAngles[1] = POS_HONMARU_SV2;
+          targetAngles[0] = cfg->pos_honmaru_sv0;
+          targetAngles[1] = cfg->pos_honmaru_sv2;
           pos_state = POS_HONMARU;
         }
         startPosMotion();
@@ -249,17 +234,17 @@ void loop() {
         pos_state = POS_STOPPED;
 
       } else if (command == 0x10) {  // リングハンド 閉じる（即時）
-        currentAngles[2] = HAND_CLOSE_ANGLE;
-        targetAngles[2]  = HAND_CLOSE_ANGLE;
-        servos[2]->write((int)roundf(HAND_CLOSE_ANGLE));
+        currentAngles[2] = cfg->hand_close;
+        targetAngles[2]  = cfg->hand_close;
+        servos[2]->write((int)roundf(cfg->hand_close));
         hand_state   = HAND_CLOSE_DONE;
         gripFailSent = false;
         sendFeedback(FB_BASE + 0x00, 0x00);
 
       } else if (command == 0x11) {  // リングハンド 開く（即時）
-        currentAngles[2] = HAND_OPEN_ANGLE;
-        targetAngles[2]  = HAND_OPEN_ANGLE;
-        servos[2]->write((int)roundf(HAND_OPEN_ANGLE));
+        currentAngles[2] = cfg->hand_open;
+        targetAngles[2]  = cfg->hand_open;
+        servos[2]->write((int)roundf(cfg->hand_open));
         hand_state = HAND_OPEN_DONE;
         sendFeedback(FB_BASE + 0x00, 0x01);
 
@@ -268,17 +253,17 @@ void loop() {
         hand_state = HAND_STOPPED;
 
       } else if (command == 0x20) {  // 櫓ハンド 閉じる
-        targetSv3Angle     = YAGURA_CLOSE_ANGLE;
+        targetSv3Angle     = cfg->yagura_close;
         sv3_state          = HAND_CLOSE;
         startSv3Angle      = currentSv3Angle;
-        motionDurationSv3  = (uint32_t)(fabsf(YAGURA_CLOSE_ANGLE - currentSv3Angle) / YAGURA_SERVO_SPEED * 1000.0f);
+        motionDurationSv3  = (uint32_t)(fabsf(cfg->yagura_close - currentSv3Angle) / YAGURA_SERVO_SPEED * 1000.0f);
         motionStartTimeSv3 = millis();
 
       } else if (command == 0x21) {  // 櫓ハンド 開く
-        targetSv3Angle     = YAGURA_OPEN_ANGLE;
+        targetSv3Angle     = cfg->yagura_open;
         sv3_state          = HAND_OPEN;
         startSv3Angle      = currentSv3Angle;
-        motionDurationSv3  = (uint32_t)(fabsf(YAGURA_OPEN_ANGLE - currentSv3Angle) / YAGURA_SERVO_SPEED * 1000.0f);
+        motionDurationSv3  = (uint32_t)(fabsf(cfg->yagura_open - currentSv3Angle) / YAGURA_SERVO_SPEED * 1000.0f);
         motionStartTimeSv3 = millis();
 
       } else if (command == 0x22) {  // 櫓ハンド 停止
