@@ -26,18 +26,18 @@ struct BoardConfig {
 const BoardConfig BOARD_CONFIGS[] = {
   // ---- ID=0: 前基板 ----
   {
-    199.0f, 268.0f,  // pickup  SV0, SV2
-     40.0f,  54.0f,  // yagura  SV0, SV2
-     30.0f,  78.0f,  // honmaru SV0, SV2
+    190.0f, 268.0f,  // pickup  SV0, SV2
+     40.0f,  46.0f,  // yagura  SV0, SV2
+     25.0f,  76.0f,  // honmaru SV0, SV2
     170.0f, 70.0f, 115.0f,  // hand open(g), close(r), grip
-      0.0f,  70.0f,          // yagura hand open, close
+      0.0f,  95.0f,          // yagura hand open, close
   },
   // ---- ID=1: 後基板 ----
   {
     199.0f, 264.0f,  // pickup  SV0, SV2
      40.0f,  50.0f,  // yagura  SV0, SV2
-     30.0f,  74.0f,  // honmaru SV0, SV2
+     25.0f,  80.0f,  // honmaru SV0, SV2
     170.0f, 70.0f, 115.0f,  // hand open(g), close(r), grip
-      0.0f,  70.0f,          // yagura hand open, close
+      0.0f,  80.0f,          // yagura hand open, close
   },
 };

@@ -50,7 +50,7 @@ void readSwitch() {
 // =====================================================================
 const float    SCALE_270         = 180.0f / 270.0f;  // 270°サーボ → servo.write() 変換係数
 const float    POS_SERVO_SPEED   = 45.0f;   // 位置サーボ 平均角速度 [deg/s]
-const float    YAGURA_SERVO_SPEED = 20.0f;  // 櫓ハンド 平均角速度 [deg/s]
+const float    YAGURA_SERVO_SPEED = 80.0f;  // 櫓ハンド 平均角速度 [deg/s]
 const uint32_t UPDATE_INTERVAL_MS = 10;     // 制御ループ周期 [ms]（100Hz）
 
 // =====================================================================
