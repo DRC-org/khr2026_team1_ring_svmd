@@ -61,6 +61,7 @@ void readSwitch() {
 // FB_BASE+0x01: 位置完了
 // FB_BASE+0x02: 把持失敗
 // FB_BASE+0x03: 櫓ハンド完了
+// FB_BASE+0x04: ヘルスチェック応答 (byte1=ring hand state, byte2=yagura state, byte3=touch sensor)
 
 // サーボ角度は config.h の BoardConfig を参照 (cfg->pos_pickup_sv0 等)
 
@@ -133,6 +134,7 @@ uint32_t motionDurationSv3  = 0;
 HandState sv3_state = HAND_OPEN;
 
 uint32_t lastUpdateTime = 0;
+uint32_t lastHeartbeatTime = 0;
 
 // =====================================================================
 // 関数プロトタイプ
@@ -141,6 +143,7 @@ void updatePosServos();
 void updateHandServo();
 void updateYaguraHandServo();
 void startPosMotion();
+void sendHealthCheck();
 
 // =====================================================================
 // サイン波イージングでモーション開始
@@ -162,6 +165,15 @@ void sendFeedback(unsigned char id, unsigned char param) {
   unsigned char txBuf[8] = {0x00};
   txBuf[0] = id;
   txBuf[1] = param;
+  CAN.sendMsgBuf(0x000, 0, 8, txBuf);
+}
+
+void sendHealthCheck() {
+  unsigned char txBuf[8] = {0x00};
+  txBuf[0] = FB_BASE + 0x04;
+  txBuf[1] = (unsigned char)hand_state;
+  txBuf[2] = (unsigned char)sv3_state;
+  txBuf[3] = (unsigned char)digitalRead(SV4);
   CAN.sendMsgBuf(0x000, 0, 8, txBuf);
 }
 
@@ -197,9 +209,9 @@ void setup() {
   servo2.attach(SV2, 500, 2400);
   servo3.attach(SV3, 500, 2400);
 
-  servo1.write(150);
-  servo2.write((int)roundf(90.0f * SCALE_270));
-  servo3.write(0);
+  servo1.write((int)roundf(cfg->hand_close));
+  servo2.write((int)roundf(cfg->pos_honmaru_sv2 * SCALE_270));
+  servo3.write((int)roundf(cfg->yagura_open * SCALE_270));
 
   if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) != CAN_OK) {
     Serial.println("CAN init failed");
@@ -218,6 +230,19 @@ void setup() {
   // SV0を起動時の向きに合わせて最後に10度へ（オフセット込み）
   float sv0_offset = (CAN_ID == 0x400) ? OFFSETS_400.sv0 : 0.0f;
   servo0.write((int)roundf((10.0f + sv0_offset) * SCALE_270));
+
+  // currentAngles / 状態を初期位置に同期
+  currentAngles[0] = 10.0f + sv0_offset;
+  currentAngles[1] = cfg->pos_honmaru_sv2;
+  currentAngles[2] = cfg->hand_close;
+  targetAngles[0]  = currentAngles[0];
+  targetAngles[1]  = currentAngles[1];
+  targetAngles[2]  = currentAngles[2];
+  currentSv3Angle  = cfg->yagura_open;
+  targetSv3Angle   = cfg->yagura_open;
+  pos_state  = POS_STOPPED;
+  hand_state = HAND_CLOSE_DONE;
+  sv3_state  = HAND_OPEN_DONE;
 }
 
 // =====================================================================
@@ -293,6 +318,8 @@ void loop() {
       } else if (command == 0x22) {  // 櫓ハンド 停止
         targetSv3Angle = currentSv3Angle;
         sv3_state = HAND_STOPPED;
+      } else if (command == 0xFF) {  // ヘルスチェック要求
+        sendHealthCheck();
       }
     }
   }
@@ -304,6 +331,12 @@ void loop() {
     updatePosServos();
     updateHandServo();
     updateYaguraHandServo();
+
+    // 定期ハートビート（1秒ごと）
+    if (now - lastHeartbeatTime >= 1000) {
+      lastHeartbeatTime = now;
+      sendHealthCheck();
+    }
 
     // open後1秒でSV4チェック: 非導通=把握成功, 導通=把握失敗
     if (gripCheckPending && now - gripCheckStartTime >= 1000) {
