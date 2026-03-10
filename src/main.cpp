@@ -197,7 +197,7 @@ void setup() {
   servo2.attach(SV2, 500, 2400);
   servo3.attach(SV3, 500, 2400);
 
-  servo0.write((int)roundf(30.0f * SCALE_270));
+  servo0.write((int)roundf(10.0f * SCALE_270));
   servo1.write(150);
   servo2.write((int)roundf(90.0f * SCALE_270));
   servo3.write(0);

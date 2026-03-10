@@ -14,7 +14,7 @@ struct BoardConfig {
 
 // 後基板（CAN 0x401, ID=1）の絶対値
 const BoardConfig CONFIG_401 = {
-  193.0f, 270.0f,  // pickup  SV0, SV2
+  199.0f, 270.0f,  // pickup  SV0, SV2
    40.0f,  50.0f,  // yagura  SV0, SV2
    25.0f,  80.0f,  // honmaru SV0, SV2
     0.0f,  85.0f,  // yagura hand open, close
@@ -25,4 +25,4 @@ const BoardConfig CONFIG_401 = {
 struct ServoOffsets {
   float sv0, sv2, sv3, sv1;
 };
-const ServoOffsets OFFSETS_400 = { 0.0f, 4.0f, 20.0f, 0.0f };
+const ServoOffsets OFFSETS_400 = { -5.0f, 4.0f, 20.0f, 0.0f };
