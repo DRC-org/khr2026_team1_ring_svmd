@@ -25,4 +25,4 @@ const BoardConfig CONFIG_401 = {
 struct ServoOffsets {
   float sv0, sv2, sv3, sv1;
 };
-const ServoOffsets OFFSETS_400 = { -5.0f, 4.0f, 20.0f, 0.0f };
+const ServoOffsets OFFSETS_400 = { -3.0f, 4.0f, 20.0f, 0.0f };
