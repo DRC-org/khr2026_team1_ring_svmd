@@ -17,7 +17,7 @@ const BoardConfig CONFIG_401 = {
   199.0f, 264.0f,  // pickup  SV0, SV2
    40.0f,  50.0f,  // yagura  SV0, SV2
    25.0f,  80.0f,  // honmaru SV0, SV2
-    0.0f,  80.0f,  // yagura hand open, close
+    0.0f,  85.0f,  // yagura hand open, close
   170.0f,  70.0f, 115.0f,  // hand open, close, grip
 };
 
