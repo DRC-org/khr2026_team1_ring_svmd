@@ -29,12 +29,31 @@ unsigned int CAN_ID;
 unsigned char FB_BASE;
 const BoardConfig* cfg;
 
+static BoardConfig s_config400;
+
 void readSwitch() {
   unsigned int id = !digitalRead(SW0) + 2 * !digitalRead(SW1) +
                     4 * !digitalRead(SW2) + 8 * !digitalRead(SW3);
   CAN_ID  = 0x400 + id;
   FB_BASE = 0x40 + id * 0x0A;
-  cfg = &BOARD_CONFIGS[id];
+  if (id == 0) {
+    s_config400 = {
+      CONFIG_401.pos_pickup_sv0  + OFFSETS_400.sv0,
+      CONFIG_401.pos_pickup_sv2  + OFFSETS_400.sv2,
+      CONFIG_401.pos_yagura_sv0  + OFFSETS_400.sv0,
+      CONFIG_401.pos_yagura_sv2  + OFFSETS_400.sv2,
+      CONFIG_401.pos_honmaru_sv0 + OFFSETS_400.sv0,
+      CONFIG_401.pos_honmaru_sv2 + OFFSETS_400.sv2,
+      CONFIG_401.yagura_open     + OFFSETS_400.sv3,
+      CONFIG_401.yagura_close    + OFFSETS_400.sv3,
+      CONFIG_401.hand_open       + OFFSETS_400.sv1,
+      CONFIG_401.hand_close      + OFFSETS_400.sv1,
+      CONFIG_401.hand_grip       + OFFSETS_400.sv1,
+    };
+    cfg = &s_config400;
+  } else {
+    cfg = &CONFIG_401;
+  }
 }
 
 // フィードバック識別子
@@ -178,7 +197,7 @@ void setup() {
   servo2.attach(SV2, 500, 2400);
   servo3.attach(SV3, 500, 2400);
 
-  servo0.write((int)roundf(90.0f * SCALE_270));
+  servo0.write((int)roundf(30.0f * SCALE_270));
   servo1.write(150);
   servo2.write((int)roundf(90.0f * SCALE_270));
   servo3.write(0);
