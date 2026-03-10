@@ -197,7 +197,6 @@ void setup() {
   servo2.attach(SV2, 500, 2400);
   servo3.attach(SV3, 500, 2400);
 
-  servo0.write((int)roundf(10.0f * SCALE_270));
   servo1.write(150);
   servo2.write((int)roundf(90.0f * SCALE_270));
   servo3.write(0);
@@ -215,6 +214,10 @@ void setup() {
   }
 
   CAN.setMode(MCP_NORMAL);
+
+  // SV0を起動時の向きに合わせて最後に10度へ（オフセット込み）
+  float sv0_offset = (CAN_ID == 0x400) ? OFFSETS_400.sv0 : 0.0f;
+  servo0.write((int)roundf((10.0f + sv0_offset) * SCALE_270));
 }
 
 // =====================================================================
