@@ -14,7 +14,7 @@ struct BoardConfig {
 
 // 後基板（CAN 0x401, ID=1）の絶対値
 const BoardConfig CONFIG_401 = {
-  197.0f, 270.0f,  // pickup  SV0, SV2
+  197.0f, 272.0f,  // pickup  SV0, SV2
    40.0f,  50.0f,  // yagura  SV0, SV2
    25.0f,  80.0f,  // honmaru SV0, SV2
     0.0f,  85.0f,  // yagura hand open, close
