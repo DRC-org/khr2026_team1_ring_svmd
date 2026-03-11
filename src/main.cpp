@@ -136,6 +136,11 @@ HandState sv3_state = HAND_OPEN;
 uint32_t lastUpdateTime = 0;
 uint32_t lastHeartbeatTime = 0;
 
+// 本丸移動時の SV0 遅延制御
+bool     sv0DelayPending   = false;
+uint32_t sv0DelayStart     = 0;
+float    sv0DelayTarget    = 0.0f;
+
 // =====================================================================
 // 関数プロトタイプ
 // =====================================================================
@@ -273,9 +278,16 @@ void loop() {
           targetAngles[1] = cfg->pos_honmaru_sv2;
           pos_state = POS_HONMARU;
         }
-        // SV0: 即時PWM指令
-        currentAngles[0] = targetAngles[0];
-        servo0.write((int)roundf(currentAngles[0] * SCALE_270));
+        // SV0: 本丸のみ500ms遅延、それ以外は即時PWM指令
+        if (param == 0x02) {
+          sv0DelayPending = true;
+          sv0DelayStart   = millis();
+          sv0DelayTarget  = targetAngles[0];
+        } else {
+          sv0DelayPending = false;
+          currentAngles[0] = targetAngles[0];
+          servo0.write((int)roundf(currentAngles[0] * SCALE_270));
+        }
         // SV2: イージングモーション開始
         startPosMotion();
 
@@ -329,6 +341,13 @@ void loop() {
   uint32_t now = millis();
   if (now - lastUpdateTime >= UPDATE_INTERVAL_MS) {
     lastUpdateTime = now;
+
+    if (sv0DelayPending && now - sv0DelayStart >= 500) {
+      sv0DelayPending = false;
+      currentAngles[0] = sv0DelayTarget;
+      servo0.write((int)roundf(currentAngles[0] * SCALE_270));
+    }
+
     updatePosServos();
     updateHandServo();
     updateYaguraHandServo();
