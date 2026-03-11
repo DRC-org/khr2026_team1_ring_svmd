@@ -69,7 +69,7 @@ void readSwitch() {
 // モーション定数
 // =====================================================================
 const float    SCALE_270         = 180.0f / 270.0f;  // 270°サーボ → servo.write() 変換係数
-const float    POS_SERVO_SPEED   = 45.0f;   // 位置サーボ 平均角速度 [deg/s]
+const float    SV2_SERVO_SPEED   = 90.0f;   // SV2 平均角速度 [deg/s]（SV0は即時指令）
 const float    YAGURA_SERVO_SPEED = 80.0f;  // 櫓ハンド 平均角速度 [deg/s]
 const uint32_t UPDATE_INTERVAL_MS = 10;     // 制御ループ周期 [ms]（100Hz）
 
@@ -150,12 +150,11 @@ void sendHealthCheck();
 // =====================================================================
 void startPosMotion() {
   uint32_t now = millis();
-  for (int i = 0; i < 2; i++) {
-    startAngles[i]     = currentAngles[i];
-    float dist         = fabsf(targetAngles[i] - currentAngles[i]);
-    motionDuration[i]  = (uint32_t)(dist / POS_SERVO_SPEED * 1000.0f);
-    motionStartTime[i] = now;
-  }
+  // SV2（i=1）のみイージング。SV0は即時指令済み
+  startAngles[1]     = currentAngles[1];
+  float dist         = fabsf(targetAngles[1] - currentAngles[1]);
+  motionDuration[1]  = (uint32_t)(dist / SV2_SERVO_SPEED * 1000.0f);
+  motionStartTime[1] = now;
 }
 
 // =====================================================================
@@ -274,10 +273,13 @@ void loop() {
           targetAngles[1] = cfg->pos_honmaru_sv2;
           pos_state = POS_HONMARU;
         }
+        // SV0: 即時PWM指令
+        currentAngles[0] = targetAngles[0];
+        servo0.write((int)roundf(currentAngles[0] * SCALE_270));
+        // SV2: イージングモーション開始
         startPosMotion();
 
       } else if (command == 0x01) {  // 位置停止
-        targetAngles[0] = currentAngles[0];
         targetAngles[1] = currentAngles[1];
         pos_state = POS_STOPPED;
 
@@ -301,22 +303,21 @@ void loop() {
         targetAngles[2] = currentAngles[2];
         hand_state = HAND_STOPPED;
 
-      } else if (command == 0x20) {  // 櫓ハンド 閉じる
-        targetSv3Angle     = cfg->yagura_close;
-        sv3_state          = HAND_CLOSE;
-        startSv3Angle      = currentSv3Angle;
-        motionDurationSv3  = (uint32_t)(fabsf(cfg->yagura_close - currentSv3Angle) / YAGURA_SERVO_SPEED * 1000.0f);
-        motionStartTimeSv3 = millis();
+      } else if (command == 0x20) {  // 櫓ハンド 閉じる（即時）
+        currentSv3Angle = cfg->yagura_close;
+        targetSv3Angle  = cfg->yagura_close;
+        servo3.write((int)roundf(currentSv3Angle * SCALE_270));
+        sv3_state = HAND_CLOSE_DONE;
+        sendFeedback(FB_BASE + 0x03, 0x00);
 
-      } else if (command == 0x21) {  // 櫓ハンド 開く
-        targetSv3Angle     = cfg->yagura_open;
-        sv3_state          = HAND_OPEN;
-        startSv3Angle      = currentSv3Angle;
-        motionDurationSv3  = (uint32_t)(fabsf(cfg->yagura_open - currentSv3Angle) / YAGURA_SERVO_SPEED * 1000.0f);
-        motionStartTimeSv3 = millis();
+      } else if (command == 0x21) {  // 櫓ハンド 開く（即時）
+        currentSv3Angle = cfg->yagura_open;
+        targetSv3Angle  = cfg->yagura_open;
+        servo3.write((int)roundf(currentSv3Angle * SCALE_270));
+        sv3_state = HAND_OPEN_DONE;
+        sendFeedback(FB_BASE + 0x03, 0x01);
 
       } else if (command == 0x22) {  // 櫓ハンド 停止
-        targetSv3Angle = currentSv3Angle;
         sv3_state = HAND_STOPPED;
       } else if (command == 0xFF) {  // ヘルスチェック要求
         sendHealthCheck();
@@ -338,8 +339,8 @@ void loop() {
       sendHealthCheck();
     }
 
-    // open後1秒でSV4チェック: 非導通=把握成功, 導通=把握失敗
-    if (gripCheckPending && now - gripCheckStartTime >= 1000) {
+    // open後0.5秒でSV4チェック: 非導通=把握成功, 導通=把握失敗
+    if (gripCheckPending && now - gripCheckStartTime >= 500) {
       gripCheckPending = false;
       if (!digitalRead(SV4)) {  // 導通 → 把握失敗 → 閉じる
         currentAngles[2] = cfg->hand_close;
@@ -366,30 +367,24 @@ void updatePosServos() {
 
   // 完了・停止中は現在角を維持
   if (pos_state >= POS_STOPPED) {
-    for (int i = 0; i < 2; i++) {
-      targetAngles[i] = currentAngles[i];
-      servos[i]->write((int)roundf(currentAngles[i] * SCALE_270));
-    }
+    targetAngles[1] = currentAngles[1];
+    servo2.write((int)roundf(currentAngles[1] * SCALE_270));
     return;
   }
 
-  // 移動中: SV0/SV2 両方をイージングで更新
-  bool all_done = true;
-  for (int i = 0; i < 2; i++) {
-    uint32_t elapsed = now - motionStartTime[i];
-    if (elapsed >= motionDuration[i]) {
-      currentAngles[i] = targetAngles[i];
-    } else {
-      all_done = false;
-      float t    = (float)elapsed / (float)motionDuration[i];
-      float ease = (1.0f - cosf(PI * t)) / 2.0f;
-      currentAngles[i] = startAngles[i] + (targetAngles[i] - startAngles[i]) * ease;
-    }
-    servos[i]->write((int)roundf(currentAngles[i] * SCALE_270));
+  // SV2 のみイージングで更新（SV0 は即時指令済み）
+  uint32_t elapsed = now - motionStartTime[1];
+  if (elapsed >= motionDuration[1]) {
+    currentAngles[1] = targetAngles[1];
+  } else {
+    float t    = (float)elapsed / (float)motionDuration[1];
+    float ease = (1.0f - cosf(PI * t)) / 2.0f;
+    currentAngles[1] = startAngles[1] + (targetAngles[1] - startAngles[1]) * ease;
   }
+  servo2.write((int)roundf(currentAngles[1] * SCALE_270));
 
-  // SV0/SV2 両方完了したらフィードバック送信
-  if (all_done) {
+  // SV2 完了でフィードバック送信
+  if (elapsed >= motionDuration[1]) {
     if      (pos_state == POS_PICKUP)  pos_state = POS_PICKUP_DONE;
     else if (pos_state == POS_YAGURA)  pos_state = POS_YAGURA_DONE;
     else if (pos_state == POS_HONMARU) pos_state = POS_HONMARU_DONE;
