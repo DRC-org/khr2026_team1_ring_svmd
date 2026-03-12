@@ -18,7 +18,7 @@ const BoardConfig CONFIG_401 = {
    40.0f,  50.0f,  // yagura  SV0, SV2
    25.0f,  80.0f,  // honmaru SV0, SV2
     0.0f,  85.0f,  // yagura hand open, close
-  170.0f,  60.0f, 115.0f,  // hand open, close, grip
+  170.0f,  50.0f, 115.0f,  // hand open, close, grip
 };
 
 // 前基板（CAN 0x400, ID=0）のサーボごとオフセット（401の値に何度足すか）
