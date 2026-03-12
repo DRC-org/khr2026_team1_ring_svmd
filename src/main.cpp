@@ -80,10 +80,12 @@ enum PosState : int8_t {
   POS_PICKUP      = 0,
   POS_YAGURA      = 1,
   POS_HONMARU     = 2,
-  POS_STOPPED     = 3,
-  POS_PICKUP_DONE = 4,
-  POS_YAGURA_DONE = 5,
-  POS_HONMARU_DONE = 6,
+  POS_INIT        = 3,
+  POS_STOPPED     = 4,
+  POS_PICKUP_DONE = 5,
+  POS_YAGURA_DONE = 6,
+  POS_HONMARU_DONE = 7,
+  POS_INIT_DONE    = 8,
 };
 
 enum HandState : int8_t {
@@ -132,6 +134,8 @@ float    startSv3Angle      = 0.0f;
 uint32_t motionStartTimeSv3 = 0;
 uint32_t motionDurationSv3  = 0;
 HandState sv3_state = HAND_OPEN;
+
+float    initSv0Angle = 10.0f;
 
 uint32_t lastUpdateTime = 0;
 uint32_t lastHeartbeatTime = 0;
@@ -236,7 +240,8 @@ void setup() {
   servo0.write((int)roundf((10.0f + sv0_offset) * SCALE_270));
 
   // currentAngles / 状態を初期位置に同期
-  currentAngles[0] = 10.0f + sv0_offset;
+  initSv0Angle     = 10.0f + sv0_offset;
+  currentAngles[0] = initSv0Angle;
   currentAngles[1] = cfg->pos_honmaru_sv2;
   currentAngles[2] = cfg->hand_close;
   targetAngles[0]  = currentAngles[0];
@@ -331,6 +336,32 @@ void loop() {
 
       } else if (command == 0x22) {  // 櫓ハンド 停止
         sv3_state = HAND_STOPPED;
+
+      } else if (command == 0x30) {  // 初期位置へ復帰
+        // SV0: 即時
+        sv0DelayPending  = false;
+        currentAngles[0] = initSv0Angle;
+        targetAngles[0]  = initSv0Angle;
+        servo0.write((int)roundf(initSv0Angle * SCALE_270));
+
+        // SV2: イージング
+        targetAngles[1] = cfg->pos_honmaru_sv2;
+        pos_state = POS_INIT;
+        startPosMotion();
+
+        // SV1: 即時
+        currentAngles[2] = cfg->hand_close;
+        targetAngles[2]  = cfg->hand_close;
+        servos[2]->write((int)roundf(cfg->hand_close));
+        hand_state       = HAND_CLOSE_DONE;
+        gripCheckPending = false;
+
+        // SV3: 即時
+        currentSv3Angle = cfg->yagura_open;
+        targetSv3Angle  = cfg->yagura_open;
+        servo3.write((int)roundf(currentSv3Angle * SCALE_270));
+        sv3_state = HAND_OPEN_DONE;
+
       } else if (command == 0xFF) {  // ヘルスチェック要求
         sendHealthCheck();
       }
@@ -407,6 +438,7 @@ void updatePosServos() {
     if      (pos_state == POS_PICKUP)  pos_state = POS_PICKUP_DONE;
     else if (pos_state == POS_YAGURA)  pos_state = POS_YAGURA_DONE;
     else if (pos_state == POS_HONMARU) pos_state = POS_HONMARU_DONE;
+    else if (pos_state == POS_INIT)    { pos_state = POS_INIT_DONE; return; }
 
     unsigned char dest = (pos_state == POS_PICKUP_DONE)  ? 0x00
                        : (pos_state == POS_YAGURA_DONE)  ? 0x01
